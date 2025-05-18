@@ -12,29 +12,24 @@ CORS(app)
 
 logging.basicConfig(level=logging.INFO)
 
-model_path = '../xlnet_bug_report_model_60_40'
+model_path = '../../xlnet-8sources-3'
 tokenizer = XLNetTokenizer.from_pretrained(model_path)
 
 class CustomXLNetClassifier(nn.Module):
     def __init__(self, hidden_size=768, num_labels=6):
         super(CustomXLNetClassifier, self).__init__()
         self.xlnet = XLNetModel.from_pretrained(model_path)
-        self.classifier = nn.Sequential(
-            nn.Linear(hidden_size, 256),
-            nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(256, num_labels)
-        )
+        self.fc = nn.Linear(hidden_size, num_labels)
 
     def forward(self, input_ids, attention_mask):
         outputs = self.xlnet(input_ids=input_ids, attention_mask=attention_mask)
         last_hidden = outputs.last_hidden_state[:, -1, :]
-        logits = self.classifier(last_hidden)
+        logits = self.fc(last_hidden)
         return logits
 
 model = CustomXLNetClassifier(num_labels=6)
-classifier_head_path = os.path.join(model_path, "classifier_head.bin")
-model.classifier.load_state_dict(torch.load(classifier_head_path, map_location=torch.device('cpu')))
+model_weights_path = os.path.join(model_path, "pytorch_model.bin")
+model.load_state_dict(torch.load(model_weights_path, map_location=torch.device('cpu')))
 model.eval()
 
 severity_labels = ['Blocker', 'Critical', 'Major', 'Normal', 'Trivial', 'Minor']
@@ -47,7 +42,7 @@ def predict():
         data = request.get_json()
         if not data or 'text' not in data:
             logging.error("Invalid request payload.")
-            return jsonify({'error': 'Invalid request. Please provide "text" field.'}), 400
+            return jsonify({'error': 'Invalid request. Please provide \"text\" field.'}), 400
 
         text = data['text']
         inputs = tokenizer(text, return_tensors='pt', truncation=True, padding=True, max_length=512)
